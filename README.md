@@ -26,7 +26,7 @@ A gritty shimmer reverb VST3 plugin built with JUCE. Combines lush infinite reve
 
 ### Prerequisites
 
-1. **Visual Studio 2022** with "Desktop development with C++" workload
+1. **Visual Studio 2026** (or 2022+) with "Desktop development with C++" workload
    - Download: https://visualstudio.microsoft.com/downloads/
    - During install, select "Desktop development with C++"
 
@@ -34,27 +34,33 @@ A gritty shimmer reverb VST3 plugin built with JUCE. Combines lush infinite reve
    - Download: https://cmake.org/download/
    - Or install via winget: `winget install Kitware.CMake`
 
+3. **JUCE Framework**
+   ```powershell
+   git clone --depth 1 https://github.com/juce-framework/JUCE.git c:\dev\JUCE\framework
+   ```
+
 ### Build Instructions
 
 ```powershell
 # Navigate to project
 cd c:\dev\JUCE\dirtverb
 
-# Configure with CMake
+# Configure with CMake (adjust generator for your VS version)
 cmake -B build -G "Visual Studio 18 2026" -A x64
+# For VS 2022: cmake -B build -G "Visual Studio 17 2022" -A x64
 
 # Build Release
 cmake --build build --config Release
 
 # Plugin will be at:
-# build\dirtverb_artefacts\Release\VST3\dirtverb.vst3
+# build\dirtverb_artefacts\Release\VST3\Dirtverb.vst3
 ```
 
 ### Install Plugin
 
 Copy the built `.vst3` folder to your system VST3 directory:
 ```powershell
-Copy-Item -Recurse "build\dirtverb_artefacts\Release\VST3\dirtverb.vst3" "C:\Program Files\Common Files\VST3\"
+Copy-Item -Recurse "build\dirtverb_artefacts\Release\VST3\Dirtverb.vst3" "C:\Program Files\Common Files\VST3\"
 ```
 
 Then rescan plugins in your DAW.
