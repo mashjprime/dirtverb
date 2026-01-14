@@ -1,0 +1,33 @@
+# Build outputs
+build/
+out/
+
+# IDE files
+.vs/
+*.vcxproj.user
+*.suo
+*.sdf
+*.opensdf
+*.user
+
+# Build artifacts
+*.obj
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.dll
+*.exe
+*.vst3
+
+# Logs
+*.log
+build_log.txt
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# JUCE
+Builds/
+JuceLibraryCode/
