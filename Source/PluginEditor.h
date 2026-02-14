@@ -1,49 +1,84 @@
 #pragma once
 
+#include <juce_gui_extra/juce_gui_extra.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "PluginProcessor.h"
-#include "UI/DirtLookAndFeel.h"
+#include "UI/CinderLookAndFeel.h"
 #include "UI/WaveformVisualizer.h"
+#include "UI/OutputMeter.h"
 
-class DirtverbEditor : public juce::AudioProcessorEditor,
-                       public juce::Timer
+// --- Reusable knob widget ---
+
+class CinderKnob : public juce::Slider
 {
 public:
-    DirtverbEditor(DirtverbProcessor&);
-    ~DirtverbEditor() override;
+    CinderKnob()
+    {
+        setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+        setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+        setPopupDisplayEnabled(true, true, nullptr);
+        setVelocityBasedMode(true);
+        setVelocityModeParameters(1.0, 1, 0.0, true);
+        setDoubleClickReturnValue(true, 0.0);
+    }
+};
+
+// --- Content panel (draws at design dimensions, scaled by parent) ---
+
+class CinderContentPanel : public juce::Component
+{
+public:
+    // Section title Y positions (set by resized in editor)
+    std::array<int, 3> sectionYPositions {};
+    CinderLookAndFeel* laf = nullptr;
+
+    void paint(juce::Graphics& g) override;
+};
+
+// --- Main Editor ---
+
+class CinderEditor : public juce::AudioProcessorEditor
+{
+public:
+    CinderEditor(CinderProcessor&);
+    ~CinderEditor() override;
 
     void paint(juce::Graphics&) override;
     void resized() override;
-    void timerCallback() override;
 
 private:
-    DirtverbProcessor& processor;
-    DirtLookAndFeel dirtLookAndFeel;
+    static constexpr int designW = 520;
+    static constexpr int designH = 440;
+
+    CinderProcessor& processor;
+    CinderLookAndFeel cinderLook;
+    juce::TooltipWindow tooltipWindow { this, 400 };
+
+    // Scaled content panel
+    CinderContentPanel contentPanel;
+    juce::ComponentBoundsConstrainer constrainer;
+
+    // Visualizer + meter (initialized in constructor with processor refs)
+    WaveformVisualizer waveformVisualizer;
+    OutputMeter outputMeter;
 
     // Knobs
-    juce::Slider decayKnob, shimmerKnob, degradeKnob, foldKnob;
-    juce::Slider dirtKnob, sizeKnob, mixKnob;
+    CinderKnob decayKnob, shimmerKnob, sizeKnob;
+    CinderKnob degradeKnob, foldKnob, dirtKnob;
+    CinderKnob mixKnob;
 
     // Labels
-    juce::Label decayLabel, shimmerLabel, degradeLabel, foldLabel;
-    juce::Label dirtLabel, sizeLabel, mixLabel;
-    juce::Label titleLabel;
-    juce::Label infiniteIndicator;
+    juce::Label decayLabel, shimmerLabel, sizeLabel;
+    juce::Label degradeLabel, foldLabel, dirtLabel;
+    juce::Label mixLabel;
 
     // Parameter attachments
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> decayAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> shimmerAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> degradeAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> foldAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> dirtAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> sizeAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> mixAttachment;
+    using SliderAtt = juce::AudioProcessorValueTreeState::SliderAttachment;
+    std::unique_ptr<SliderAtt> decayAtt, shimmerAtt, sizeAtt;
+    std::unique_ptr<SliderAtt> degradeAtt, foldAtt, dirtAtt;
+    std::unique_ptr<SliderAtt> mixAtt;
 
-    // Visualizer
-    WaveformVisualizer waveformVisualizer;
+    void setupLabel(juce::Label& label, const juce::String& text);
 
-    // Helper to set up a knob
-    void setupKnob(juce::Slider& knob, juce::Label& label, const juce::String& name);
-
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DirtverbEditor)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(CinderEditor)
 };

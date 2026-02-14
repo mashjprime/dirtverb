@@ -1,187 +1,205 @@
+#include "PluginProcessor.h"
 #include "PluginEditor.h"
 
-DirtverbEditor::DirtverbEditor(DirtverbProcessor& p)
-    : AudioProcessorEditor(&p), processor(p)
+// --- CinderContentPanel paint ---
+
+void CinderContentPanel::paint(juce::Graphics& g)
 {
-    // Apply custom look and feel
-    setLookAndFeel(&dirtLookAndFeel);
+    g.fillAll(juce::Colour(CinderLookAndFeel::colBgPrimary));
 
-    // Set up all knobs
-    setupKnob(decayKnob, decayLabel, "DECAY");
-    setupKnob(shimmerKnob, shimmerLabel, "SHIMMER");
-    setupKnob(degradeKnob, degradeLabel, "DEGRADE");
-    setupKnob(foldKnob, foldLabel, "FOLD");
-    setupKnob(dirtKnob, dirtLabel, "DIRT");
-    setupKnob(sizeKnob, sizeLabel, "SIZE");
-    setupKnob(mixKnob, mixLabel, "MIX");
+    if (laf == nullptr) return;
 
-    // Create parameter attachments
-    auto& apvts = processor.getAPVTS();
-    decayAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        apvts, "decay", decayKnob);
-    shimmerAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        apvts, "shimmer", shimmerKnob);
-    degradeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        apvts, "degrade", degradeKnob);
-    foldAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        apvts, "fold", foldKnob);
-    dirtAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        apvts, "dirt", dirtKnob);
-    sizeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        apvts, "size", sizeKnob);
-    mixAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        apvts, "mix", mixKnob);
+    const int pad = 16;
+    int w = getWidth();
 
-    // Title label
-    titleLabel.setText("DIRTVERB", juce::dontSendNotification);
-    titleLabel.setFont(juce::Font("Consolas", 28.0f, juce::Font::bold));
-    titleLabel.setJustificationType(juce::Justification::centred);
-    titleLabel.setColour(juce::Label::textColourId, dirtLookAndFeel.accent);
-    addAndMakeVisible(titleLabel);
+    // Header bar (36px)
+    g.setFont(laf->getHeaderFont());
+    g.setColour(juce::Colour(CinderLookAndFeel::colTextPrimary));
+    g.drawText("CINDER", pad, 8, 200, 22, juce::Justification::centredLeft);
 
-    // Infinite indicator (shows when decay is at max)
-    infiniteIndicator.setText(juce::CharPointer_UTF8("\xe2\x88\x9e"), juce::dontSendNotification);
-    infiniteIndicator.setFont(juce::Font("Consolas", 24.0f, juce::Font::bold));
-    infiniteIndicator.setJustificationType(juce::Justification::centred);
-    infiniteIndicator.setColour(juce::Label::textColourId, dirtLookAndFeel.shimmerColor);
-    infiniteIndicator.setAlpha(0.0f);
-    addAndMakeVisible(infiniteIndicator);
+    g.setFont(laf->getBrandFont());
+    g.setColour(juce::Colour(CinderLookAndFeel::colTextDim));
+    g.drawText("SUBSTRATE AUDIO", w - 140 - pad, 12, 140, 14, juce::Justification::centredRight);
 
-    // Visualizer
-    addAndMakeVisible(waveformVisualizer);
+    // Section titles and dividers
+    const char* titles[] = { "REVERB", "DESTRUCTION", "OUTPUT" };
 
-    // Start timer for UI updates
-    startTimerHz(30);
+    for (int i = 0; i < 3; ++i)
+    {
+        int sy = sectionYPositions[i];
+        if (sy <= 0) continue;
 
-    // Set window size (experimental aspect ratio)
-    setSize(520, 400);
+        // Divider line above section
+        g.setColour(juce::Colour(CinderLookAndFeel::colBorder));
+        g.drawHorizontalLine(sy, static_cast<float>(pad), static_cast<float>(w - pad));
+
+        // Section title
+        g.setFont(laf->getSectionTitleFont());
+        g.setColour(juce::Colour(CinderLookAndFeel::colAccent));
+        g.drawText(titles[i], pad, sy + 2, 200, 14, juce::Justification::centredLeft);
+    }
+
+    // Footer
+    g.setFont(laf->getBrandFont());
+    g.setColour(juce::Colour(CinderLookAndFeel::colTextDim));
+    g.drawText("v1.0", pad, getHeight() - 20, 60, 14, juce::Justification::centredLeft);
 }
 
-DirtverbEditor::~DirtverbEditor()
+// --- Editor implementation ---
+
+CinderEditor::CinderEditor(CinderProcessor& p)
+    : AudioProcessorEditor(&p),
+      processor(p),
+      waveformVisualizer(p.currentReverbLevel,
+                         *p.apvts.getRawParameterValue("decay"),
+                         *p.apvts.getRawParameterValue("degrade")),
+      outputMeter(p.outputRmsLevel, p.outputPeakLevel)
+{
+    setLookAndFeel(&cinderLook);
+    contentPanel.laf = &cinderLook;
+
+    addAndMakeVisible(contentPanel);
+
+    // Visualizer
+    contentPanel.addAndMakeVisible(waveformVisualizer);
+
+    // Output meter
+    contentPanel.addAndMakeVisible(outputMeter);
+
+    // Helpers
+    auto addKnob = [this](CinderKnob& slider, juce::Label& label,
+                          const juce::String& text, const juce::String& paramId,
+                          std::unique_ptr<SliderAtt>& att) {
+        contentPanel.addAndMakeVisible(slider);
+        slider.setTooltip(text);
+        att = std::make_unique<SliderAtt>(processor.apvts, paramId, slider);
+        setupLabel(label, text);
+    };
+
+    // Reverb section
+    addKnob(decayKnob,   decayLabel,   "DECAY",   "decay",   decayAtt);
+    addKnob(shimmerKnob, shimmerLabel, "SHIMMER", "shimmer", shimmerAtt);
+    addKnob(sizeKnob,    sizeLabel,    "SIZE",    "size",    sizeAtt);
+
+    // Destruction section
+    addKnob(degradeKnob, degradeLabel, "DEGRADE", "degrade", degradeAtt);
+    addKnob(foldKnob,    foldLabel,    "FOLD",    "fold",    foldAtt);
+    addKnob(dirtKnob,    dirtLabel,    "DIRT",    "dirt",    dirtAtt);
+
+    // Output section
+    addKnob(mixKnob, mixLabel, "MIX", "mix", mixAtt);
+
+    // Resizable (aspect-ratio locked)
+    constrainer.setFixedAspectRatio(static_cast<double>(designW) / static_cast<double>(designH));
+    constrainer.setSizeLimits(
+        static_cast<int>(designW * 0.8), static_cast<int>(designH * 0.8),
+        static_cast<int>(designW * 1.4), static_cast<int>(designH * 1.4));
+    setConstrainer(&constrainer);
+    setResizable(true, true);
+
+    setSize(designW, designH);
+}
+
+CinderEditor::~CinderEditor()
 {
     setLookAndFeel(nullptr);
 }
 
-void DirtverbEditor::setupKnob(juce::Slider& knob, juce::Label& label, const juce::String& name)
+void CinderEditor::setupLabel(juce::Label& label, const juce::String& text)
 {
-    knob.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    knob.setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
-    knob.setName(name);
-    addAndMakeVisible(knob);
-
-    label.setText(name, juce::dontSendNotification);
+    label.setText(text, juce::dontSendNotification);
     label.setJustificationType(juce::Justification::centred);
-    addAndMakeVisible(label);
+    label.setFont(cinderLook.getLabelFont());
+    label.setColour(juce::Label::textColourId, juce::Colour(CinderLookAndFeel::colTextSecondary));
+    contentPanel.addAndMakeVisible(label);
 }
 
-void DirtverbEditor::paint(juce::Graphics& g)
+void CinderEditor::paint(juce::Graphics& g)
 {
-    // Background gradient
-    juce::ColourGradient bgGradient(
-        dirtLookAndFeel.backgroundDark, 0.0f, 0.0f,
-        dirtLookAndFeel.backgroundMid, 0.0f, static_cast<float>(getHeight()),
-        false);
-    g.setGradientFill(bgGradient);
-    g.fillAll();
-
-    // Subtle noise texture overlay
-    juce::Random rng(42); // Fixed seed for consistent pattern
-    g.setColour(juce::Colours::white.withAlpha(0.02f));
-    for (int i = 0; i < 500; ++i)
-    {
-        float x = rng.nextFloat() * static_cast<float>(getWidth());
-        float y = rng.nextFloat() * static_cast<float>(getHeight());
-        g.fillRect(x, y, 1.0f, 1.0f);
-    }
-
-    // Separator lines
-    g.setColour(dirtLookAndFeel.knobTrack);
-    
-    // Line under title
-    g.drawHorizontalLine(55, 20.0f, static_cast<float>(getWidth() - 20));
-    
-    // Line between top and bottom rows
-    g.drawHorizontalLine(210, 20.0f, static_cast<float>(getWidth() - 20));
-
-    // Section labels
-    g.setColour(dirtLookAndFeel.textColor.withAlpha(0.5f));
-    g.setFont(juce::Font("Consolas", 10.0f, juce::Font::plain));
-    g.drawText("REVERB", 20, 60, 80, 15, juce::Justification::left);
-    g.drawText("DESTRUCTION", 20, 215, 120, 15, juce::Justification::left);
+    g.fillAll(juce::Colour(CinderLookAndFeel::colBgPrimary));
 }
 
-void DirtverbEditor::resized()
+void CinderEditor::resized()
 {
     auto bounds = getLocalBounds();
-    
-    // Title area
-    titleLabel.setBounds(bounds.getX(), 15, bounds.getWidth(), 35);
-    infiniteIndicator.setBounds(bounds.getWidth() - 50, 15, 40, 35);
 
-    // Knob dimensions
-    const int knobSize = 80;
-    const int labelHeight = 20;
-    const int knobSpacing = 10;
-    
-    // Top row: DECAY, SHIMMER, SIZE (reverb controls)
-    // Starting at y = 75
-    const int topRowY = 80;
-    const int row1StartX = 30;
-    
-    decayKnob.setBounds(row1StartX, topRowY, knobSize, knobSize);
-    decayLabel.setBounds(row1StartX, topRowY + knobSize, knobSize, labelHeight);
-    
-    shimmerKnob.setBounds(row1StartX + knobSize + knobSpacing, topRowY, knobSize, knobSize);
-    shimmerLabel.setBounds(row1StartX + knobSize + knobSpacing, topRowY + knobSize, knobSize, labelHeight);
-    
-    sizeKnob.setBounds(row1StartX + (knobSize + knobSpacing) * 2, topRowY, knobSize, knobSize);
-    sizeLabel.setBounds(row1StartX + (knobSize + knobSpacing) * 2, topRowY + knobSize, knobSize, labelHeight);
+    // Scale content panel to fit window, maintaining design dimensions internally
+    float scaleX = static_cast<float>(bounds.getWidth()) / static_cast<float>(designW);
+    float scaleY = static_cast<float>(bounds.getHeight()) / static_cast<float>(designH);
+    float scale = juce::jmin(scaleX, scaleY);
 
-    // Waveform visualizer (right side of top row)
-    const int vizX = row1StartX + (knobSize + knobSpacing) * 3 + 20;
-    waveformVisualizer.setBounds(vizX, topRowY, bounds.getWidth() - vizX - 20, knobSize + labelHeight);
+    contentPanel.setTransform(juce::AffineTransform::scale(scale));
+    contentPanel.setBounds(0, 0, designW, designH);
 
-    // Bottom row: DEGRADE, FOLD, DIRT, MIX (destruction controls)
-    const int bottomRowY = 235;
-    
-    degradeKnob.setBounds(row1StartX, bottomRowY, knobSize, knobSize);
-    degradeLabel.setBounds(row1StartX, bottomRowY + knobSize, knobSize, labelHeight);
-    
-    foldKnob.setBounds(row1StartX + knobSize + knobSpacing, bottomRowY, knobSize, knobSize);
-    foldLabel.setBounds(row1StartX + knobSize + knobSpacing, bottomRowY + knobSize, knobSize, labelHeight);
-    
-    dirtKnob.setBounds(row1StartX + (knobSize + knobSpacing) * 2, bottomRowY, knobSize, knobSize);
-    dirtLabel.setBounds(row1StartX + (knobSize + knobSpacing) * 2, bottomRowY + knobSize, knobSize, labelHeight);
-    
-    // MIX knob larger and on the right
-    const int mixKnobSize = knobSize + 20;
-    mixKnob.setBounds(bounds.getWidth() - mixKnobSize - 30, bottomRowY - 10, mixKnobSize, mixKnobSize);
-    mixLabel.setBounds(bounds.getWidth() - mixKnobSize - 30, bottomRowY + mixKnobSize - 10, mixKnobSize, labelHeight);
-}
+    // --- All layout below at design dimensions (520 x 440) ---
+    const int pad = 16;
+    const int labelH = 14;
+    const int knobS = 55;
+    int y = 0;
 
-void DirtverbEditor::timerCallback()
-{
-    // Update visualizer with current levels
-    waveformVisualizer.setLevel(processor.getCurrentReverbLevel());
-    waveformVisualizer.setDegrade(degradeKnob.getValue());
-    
-    // Update infinite indicator visibility
-    float decayValue = static_cast<float>(decayKnob.getValue());
-    bool isInfinite = decayValue > 29.0f;
-    
-    // Animate the infinite symbol
-    float targetAlpha = isInfinite ? 1.0f : 0.0f;
-    float currentAlpha = infiniteIndicator.getAlpha();
-    float newAlpha = currentAlpha + (targetAlpha - currentAlpha) * 0.1f;
-    infiniteIndicator.setAlpha(newAlpha);
-    
-    // Pulse the infinite symbol when active
-    if (isInfinite)
+    // Header: 36px
+    y += 36;
+
+    // Waveform Visualizer: 76px
+    waveformVisualizer.setBounds(pad, y, designW - pad * 2, 76);
+    y += 80;
+
+    // --- REVERB section (DECAY, SHIMMER, SIZE) ---
+    contentPanel.sectionYPositions[0] = y;
+    y += 18;
     {
-        static float pulsePhase = 0.0f;
-        pulsePhase += 0.15f;
-        float pulse = 0.7f + 0.3f * std::sin(pulsePhase);
-        infiniteIndicator.setColour(juce::Label::textColourId, 
-            dirtLookAndFeel.shimmerColor.withMultipliedBrightness(pulse));
+        int numKnobs = 3;
+        int totalW = designW - pad * 2;
+        int spacing = (totalW - numKnobs * knobS) / (numKnobs + 1);
+        int kx = pad + spacing;
+
+        auto placeKnob = [&](juce::Label& label, juce::Slider& slider) {
+            label.setBounds(kx, y, knobS, labelH);
+            slider.setBounds(kx, y + labelH, knobS, knobS);
+            kx += knobS + spacing;
+        };
+
+        placeKnob(decayLabel, decayKnob);
+        placeKnob(shimmerLabel, shimmerKnob);
+        placeKnob(sizeLabel, sizeKnob);
+    }
+    y += knobS + labelH + 4;
+
+    // --- DESTRUCTION section (DEGRADE, FOLD, DIRT) ---
+    contentPanel.sectionYPositions[1] = y;
+    y += 18;
+    {
+        int numKnobs = 3;
+        int totalW = designW - pad * 2;
+        int spacing = (totalW - numKnobs * knobS) / (numKnobs + 1);
+        int kx = pad + spacing;
+
+        auto placeKnob = [&](juce::Label& label, juce::Slider& slider) {
+            label.setBounds(kx, y, knobS, labelH);
+            slider.setBounds(kx, y + labelH, knobS, knobS);
+            kx += knobS + spacing;
+        };
+
+        placeKnob(degradeLabel, degradeKnob);
+        placeKnob(foldLabel, foldKnob);
+        placeKnob(dirtLabel, dirtKnob);
+    }
+    y += knobS + labelH + 4;
+
+    // --- OUTPUT section (MIX knob + OutputMeter) ---
+    contentPanel.sectionYPositions[2] = y;
+    y += 18;
+    {
+        int totalW = designW - pad * 2;
+        int meterW = 20;
+        int knobW = knobS;
+        int contentW = knobW + meterW + 20;
+        int startX = pad + (totalW - contentW) / 2;
+
+        mixLabel.setBounds(startX, y, knobW, labelH);
+        mixKnob.setBounds(startX, y + labelH, knobW, knobW);
+
+        int meterX = startX + knobW + 20;
+        outputMeter.setBounds(meterX, y, meterW, knobW + labelH);
     }
 }

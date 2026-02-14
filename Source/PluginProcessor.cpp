@@ -1,7 +1,7 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
-DirtverbProcessor::DirtverbProcessor()
+CinderProcessor::CinderProcessor()
     : AudioProcessor(BusesProperties()
                      .withInput("Input", juce::AudioChannelSet::stereo(), true)
                      .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
@@ -17,11 +17,11 @@ DirtverbProcessor::DirtverbProcessor()
     mixParam = apvts.getRawParameterValue("mix");
 }
 
-DirtverbProcessor::~DirtverbProcessor()
+CinderProcessor::~CinderProcessor()
 {
 }
 
-juce::AudioProcessorValueTreeState::ParameterLayout DirtverbProcessor::createParameterLayout()
+juce::AudioProcessorValueTreeState::ParameterLayout CinderProcessor::createParameterLayout()
 {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
 
@@ -78,7 +78,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout DirtverbProcessor::createPar
     return {params.begin(), params.end()};
 }
 
-void DirtverbProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
+void CinderProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
     currentSampleRate = sampleRate;
 
@@ -110,7 +110,7 @@ void DirtverbProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     mixSmoothed.setCurrentAndTargetValue(*mixParam);
 }
 
-void DirtverbProcessor::releaseResources()
+void CinderProcessor::releaseResources()
 {
     shimmerReverbL.reset();
     shimmerReverbR.reset();
@@ -118,7 +118,7 @@ void DirtverbProcessor::releaseResources()
     lofiDegraderR.reset();
 }
 
-void DirtverbProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void CinderProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
     juce::ScopedNoDenormals noDenormals;
 
@@ -138,6 +138,8 @@ void DirtverbProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mid
     float* rightChannel = numChannels > 1 ? buffer.getWritePointer(1) : leftChannel;
 
     float peakLevel = 0.0f;
+    float sumSquares = 0.0f;
+    float blockPeak = 0.0f;
 
     for (int i = 0; i < numSamples; ++i)
     {
@@ -190,20 +192,33 @@ void DirtverbProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mid
 
         // Track peak for visualization
         peakLevel = std::max(peakLevel, std::abs(wetL));
+
+        // Accumulate for output metering
+        float outSample = (leftChannel[i] + rightChannel[i]) * 0.5f;
+        sumSquares += outSample * outSample;
+        blockPeak = std::max(blockPeak, std::abs(outSample));
     }
 
-    // Update visualization level (with smoothing)
+    // Update visualization level
     currentReverbLevel.store(peakLevel);
+
+    // Update output metering atomics
+    if (numSamples > 0)
+    {
+        float rms = std::sqrt(sumSquares / static_cast<float>(numSamples));
+        outputRmsLevel.store(rms, std::memory_order_relaxed);
+        outputPeakLevel.store(blockPeak, std::memory_order_relaxed);
+    }
 }
 
-void DirtverbProcessor::getStateInformation(juce::MemoryBlock& destData)
+void CinderProcessor::getStateInformation(juce::MemoryBlock& destData)
 {
     auto state = apvts.copyState();
     std::unique_ptr<juce::XmlElement> xml(state.createXml());
     copyXmlToBinary(*xml, destData);
 }
 
-void DirtverbProcessor::setStateInformation(const void* data, int sizeInBytes)
+void CinderProcessor::setStateInformation(const void* data, int sizeInBytes)
 {
     std::unique_ptr<juce::XmlElement> xml(getXmlFromBinary(data, sizeInBytes));
     if (xml != nullptr && xml->hasTagName(apvts.state.getType()))
@@ -212,13 +227,13 @@ void DirtverbProcessor::setStateInformation(const void* data, int sizeInBytes)
     }
 }
 
-juce::AudioProcessorEditor* DirtverbProcessor::createEditor()
+juce::AudioProcessorEditor* CinderProcessor::createEditor()
 {
-    return new DirtverbEditor(*this);
+    return new CinderEditor(*this);
 }
 
 // Plugin instantiation
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
-    return new DirtverbProcessor();
+    return new CinderProcessor();
 }

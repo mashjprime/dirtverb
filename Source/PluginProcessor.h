@@ -6,11 +6,11 @@
 #include "DSP/LofiDegrader.h"
 #include "DSP/Wavefolder.h"
 
-class DirtverbProcessor : public juce::AudioProcessor
+class CinderProcessor : public juce::AudioProcessor
 {
 public:
-    DirtverbProcessor();
-    ~DirtverbProcessor() override;
+    CinderProcessor();
+    ~CinderProcessor() override;
 
     // Audio processing
     void prepareToPlay(double sampleRate, int samplesPerBlock) override;
@@ -39,14 +39,13 @@ public:
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override { return true; }
 
-    // Parameter access
-    juce::AudioProcessorValueTreeState& getAPVTS() { return apvts; }
-    
-    // For visualization
-    float getCurrentReverbLevel() const { return currentReverbLevel.load(); }
+    // Public state (for UI components)
+    juce::AudioProcessorValueTreeState apvts;
+    std::atomic<float> currentReverbLevel{0.0f};
+    std::atomic<float> outputRmsLevel{0.0f};
+    std::atomic<float> outputPeakLevel{0.0f};
 
 private:
-    juce::AudioProcessorValueTreeState apvts;
     juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
     // DSP components
@@ -72,10 +71,7 @@ private:
     juce::SmoothedValue<float> sizeSmoothed;
     juce::SmoothedValue<float> mixSmoothed;
 
-    // For visualization
-    std::atomic<float> currentReverbLevel{0.0f};
-
     double currentSampleRate = 44100.0;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DirtverbProcessor)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(CinderProcessor)
 };

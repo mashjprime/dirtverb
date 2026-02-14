@@ -1,11 +1,11 @@
 @echo off
 echo ===================================
-echo  Dirtverb Plugin Installer
+echo  Cinder Plugin Installer
 echo ===================================
 echo.
 
 set VST3_DIR=C:\Program Files\Common Files\VST3
-set PLUGIN_PATH=build\dirtverb_artefacts\Release\VST3\dirtverb.vst3
+set PLUGIN_PATH=build\Cinder_artefacts\Release\VST3\Cinder.vst3
 
 if not exist "%PLUGIN_PATH%" (
     echo ERROR: Plugin not found at %PLUGIN_PATH%
@@ -27,7 +27,7 @@ if %ERRORLEVEL% neq 0 (
 )
 
 :: Copy plugin
-xcopy /E /I /Y "%PLUGIN_PATH%" "%VST3_DIR%\dirtverb.vst3"
+xcopy /E /I /Y "%PLUGIN_PATH%" "%VST3_DIR%\Cinder.vst3"
 
 if %ERRORLEVEL% equ 0 (
     echo.
@@ -36,7 +36,7 @@ if %ERRORLEVEL% equ 0 (
     echo ===================================
     echo.
     echo Plugin installed to:
-    echo   %VST3_DIR%\dirtverb.vst3
+    echo   %VST3_DIR%\Cinder.vst3
     echo.
     echo Now rescan plugins in your DAW:
     echo   Ableton: Preferences ^> Plugins ^> Rescan

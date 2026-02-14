@@ -1,6 +1,6 @@
 @echo off
 echo ===================================
-echo  Dirtverb Build Script
+echo  Cinder Build Script
 echo ===================================
 echo.
 
@@ -62,7 +62,7 @@ echo  BUILD SUCCESSFUL!
 echo ===================================
 echo.
 echo Plugin location:
-echo   build\dirtverb_artefacts\Release\VST3\dirtverb.vst3
+echo   build\Cinder_artefacts\Release\VST3\Cinder.vst3
 echo.
 echo To install, run install.bat
 echo.

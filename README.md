@@ -1,16 +1,20 @@
-# Dirtverb 🔊💀
+# Cinder *(repo: dirtverb)*
 
-A gritty shimmer reverb VST3 plugin built with JUCE. Combines lush infinite reverb with lo-fi degradation and wavefolder distortion.
+A gritty shimmer reverb VST3 plugin by **Substrate Audio**. Built with JUCE 8 and C++20. Combines lush infinite reverb with lo-fi degradation and wavefolder distortion.
 
-## ✨ Features
+**Visual identity:** Substrate Audio standard — `#0A0A0A` background, DM Sans + Space Mono typography, ember `#C4502A` accent, flat arc-based knobs, resizable UI, tooltips, output metering.
+
+## Features
 
 - **Shimmer Reverb**: 8-channel Feedback Delay Network with pitch-shifted feedback for ethereal, infinite tails
 - **Lo-fi Degradation**: Sample rate reduction (44.1kHz → 4kHz) and bit crushing (16-bit → 4-bit)
 - **Wavefolder Distortion**: Triangle wave folding for rich harmonic content
 - **Parallel Architecture**: Blend between clean reverb and wavefolded reverb
-- **Experimental UI**: "Corrupted Crystal" theme with glitch effects
+- **Resizable UI**: Aspect-ratio locked, 80%–140% scaling
+- **Output Metering**: RMS/peak meter with peak hold
+- **Tooltips**: Parameter value popups on hover/drag
 
-## 🎛️ Parameters
+## Parameters
 
 | Parameter | Description |
 |-----------|-------------|
@@ -22,78 +26,74 @@ A gritty shimmer reverb VST3 plugin built with JUCE. Combines lush infinite reve
 | **DIRT** | Clean vs wavefolded reverb blend |
 | **MIX** | Dry/wet mix |
 
-## 🚀 Quick Start (Windows)
+## Quick Start (Windows)
 
 ### Prerequisites
 
 1. **Visual Studio 2026** (or 2022+) with "Desktop development with C++" workload
-   - Download: https://visualstudio.microsoft.com/downloads/
-   - During install, select "Desktop development with C++"
-
 2. **CMake 3.22+**
-   - Download: https://cmake.org/download/
-   - Or install via winget: `winget install Kitware.CMake`
-
-3. **JUCE Framework**
-   ```powershell
-   git clone --depth 1 https://github.com/juce-framework/JUCE.git c:\dev\JUCE\framework
-   ```
+3. **JUCE Framework** cloned alongside this repo
 
 ### Build Instructions
 
 ```powershell
-# Navigate to project
 cd c:\dev\JUCE\dirtverb
 
-# Configure with CMake (adjust generator for your VS version)
+# Configure
 cmake -B build -G "Visual Studio 18 2026" -A x64
-# For VS 2022: cmake -B build -G "Visual Studio 17 2022" -A x64
 
 # Build Release
 cmake --build build --config Release
 
-# Plugin will be at:
-# build\dirtverb_artefacts\Release\VST3\Dirtverb.vst3
+# Plugin output:
+# build\Cinder_artefacts\Release\VST3\Cinder.vst3
 ```
+
+Or simply run `build.bat`.
 
 ### Install Plugin
 
-Copy the built `.vst3` folder to your system VST3 directory:
+Run `install.bat` as administrator, or manually copy:
 ```powershell
-Copy-Item -Recurse "build\dirtverb_artefacts\Release\VST3\Dirtverb.vst3" "C:\Program Files\Common Files\VST3\"
+Copy-Item -Recurse "build\Cinder_artefacts\Release\VST3\Cinder.vst3" "C:\Program Files\Common Files\VST3\"
 ```
 
 Then rescan plugins in your DAW.
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 dirtverb/
 ├── CMakeLists.txt              # Build configuration
+├── Resources/
+│   └── Fonts/                  # Embedded DM Sans + Space Mono
 ├── Source/
-│   ├── PluginProcessor.h/cpp   # Audio processing core
-│   ├── PluginEditor.h/cpp      # UI implementation
+│   ├── PluginProcessor.h/cpp   # Audio processing core (CinderProcessor)
+│   ├── PluginEditor.h/cpp      # UI implementation (CinderEditor)
 │   ├── DSP/
 │   │   ├── ShimmerReverb.h     # FDN reverb with pitch shift
 │   │   ├── LofiDegrader.h      # Sample rate + bit reduction
 │   │   └── Wavefolder.h        # Triangle wave folding
 │   └── UI/
-│       ├── DirtLookAndFeel.h   # Custom visual theme
-│       └── WaveformVisualizer.h # Level visualization
+│       ├── CinderLookAndFeel.h # Substrate Audio visual theme
+│       ├── OutputMeter.h       # RMS/peak output meter
+│       └── WaveformVisualizer.h # Level visualization with glitch effects
+├── build.bat                   # Windows build script
+├── install.bat                 # VST3 installer
 └── README.md
 ```
 
-## 🎨 Signal Flow
+## Signal Flow
 
 ```
 Input → Shimmer Reverb → Lo-fi Degradation → ┬→ Clean Path    ─┬→ DIRT blend → MIX → Output
                                               └→ Wavefolder Path─┘
 ```
 
-## 🎹 Tested DAWs
+## Tested DAWs
 
 - Ableton Live 11/12
 
-## 📄 License
+## License
 
 MIT License - feel free to use and modify!
