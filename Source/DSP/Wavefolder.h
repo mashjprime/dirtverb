@@ -19,10 +19,10 @@ class Wavefolder
 public:
     Wavefolder() = default;
 
-    void prepare(double sampleRate)
+    void prepare(double sr)
     {
-        this->sampleRate = sampleRate;
-        
+        sampleRate = sr;
+
         // DC blocker coefficients (high-pass at ~20Hz)
         const float fc = 20.0f;
         const float wc = 2.0f * 3.14159265f * fc / static_cast<float>(sampleRate);

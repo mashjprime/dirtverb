@@ -39,7 +39,7 @@ public:
         // Map to target sample rate: 44100 Hz -> 4000 Hz
         // Using exponential curve for more musical control
         float srRatio = std::pow(0.1f, degradeAmount); // 1.0 -> 0.1
-        targetSampleRate = actualSampleRate * srRatio;
+        targetSampleRate = static_cast<float>(actualSampleRate) * srRatio;
         targetSampleRate = std::max(targetSampleRate, 4000.0f);
 
         // Map to bit depth: 16 bits -> 4 bits
@@ -57,7 +57,7 @@ public:
         }
 
         // Sample rate reduction via sample-and-hold
-        float phaseIncrement = targetSampleRate / actualSampleRate;
+        float phaseIncrement = targetSampleRate / static_cast<float>(actualSampleRate);
         phase += phaseIncrement;
 
         if (phase >= 1.0f)

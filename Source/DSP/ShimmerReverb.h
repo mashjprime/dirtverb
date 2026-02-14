@@ -19,9 +19,9 @@ class ShimmerReverb
 public:
     ShimmerReverb() = default;
 
-    void prepare(double sampleRate, int maxBlockSize)
+    void prepare(double sr, int maxBlockSize)
     {
-        this->sampleRate = sampleRate;
+        sampleRate = sr;
 
         // Calculate delay times based on sample rate
         // Using prime-ish numbers for inharmonic density
@@ -68,7 +68,7 @@ public:
         std::fill(pitchShiftBuffer.begin(), pitchShiftBuffer.end(), 0.0f);
     }
 
-    void setParameters(float decaySeconds, float shimmerAmount, float roomSize)
+    void setParameters(float decaySeconds, float shimmerAmount, float size)
     {
         // Convert decay time to feedback gain
         // Using RT60 formula: gain = 10^(-3 * delayTime / RT60)
@@ -87,8 +87,8 @@ public:
             feedbackGain = std::clamp(feedbackGain, 0.0f, 0.985f);
         }
 
-        this->shimmerMix = shimmerAmount;
-        this->roomSize = std::clamp(roomSize, 0.0f, 1.0f);
+        shimmerMix = shimmerAmount;
+        roomSize = std::clamp(size, 0.0f, 1.0f);
 
         // Damping: higher roomSize = less damping (brighter)
         // Also reduce damping coefficient to absorb more energy
