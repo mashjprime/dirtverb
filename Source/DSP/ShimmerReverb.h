@@ -48,11 +48,14 @@ public:
             filter = 0.0f;
         }
 
-        // Pitch shifter for shimmer (granular-style)
+        // Pitch shifter for shimmer (dual-grain overlap-add)
         pitchShiftBuffer.resize(static_cast<size_t>(sampleRate * 0.5)); // 500ms buffer
         std::fill(pitchShiftBuffer.begin(), pitchShiftBuffer.end(), 0.0f);
         pitchShiftWritePos = 0;
-        pitchShiftReadPos = 0.0f;
+        grainReadPos[0] = 0.0f;
+        grainReadPos[1] = 0.0f;
+        grainPhase[0] = 0;
+        grainPhase[1] = grainSize / 2;  // Second grain starts 50% offset
 
         reset();
     }
@@ -66,6 +69,11 @@ public:
         for (auto& state : delayLineStates)
             state = 0.0f;
         std::fill(pitchShiftBuffer.begin(), pitchShiftBuffer.end(), 0.0f);
+        pitchShiftWritePos = 0;
+        grainReadPos[0] = 0.0f;
+        grainReadPos[1] = 0.0f;
+        grainPhase[0] = 0;
+        grainPhase[1] = grainSize / 2;
     }
 
     void setParameters(float decaySeconds, float shimmerAmount, float size)
@@ -185,10 +193,12 @@ private:
     float roomSize = 0.5f;
     float shimmerCompensation = 1.0f;
 
-    // Pitch shifter state (simple granular)
+    // Pitch shifter state (dual-grain overlap-add)
     std::vector<float> pitchShiftBuffer;
     int pitchShiftWritePos = 0;
-    float pitchShiftReadPos = 0.0f;
+    float grainReadPos[2] = {0.0f, 0.0f};   // Two overlapping grains
+    int grainPhase[2] = {0, 0};               // Phase counter per grain
+    static constexpr int grainSize = 1024;     // Grain length in samples
 
     // Soft limiter to prevent runaway - uses tanh for smooth limiting
     float softLimit(float x)
@@ -235,32 +245,49 @@ private:
         return output;
     }
 
-    // Simple granular pitch shifter (+1 octave)
+    // Dual-grain overlap-add pitch shifter (+1 octave)
+    // Two grains with 50% overlap and Hann windowing for artifact-free output
     float processPitchShift(float input)
     {
-        // Write to buffer
-        pitchShiftBuffer[pitchShiftWritePos] = input;
-        pitchShiftWritePos = (pitchShiftWritePos + 1) % static_cast<int>(pitchShiftBuffer.size());
-
-        // Read at double speed for octave up
+        const int bufSize = static_cast<int>(pitchShiftBuffer.size());
         const float pitchRatio = 2.0f;
-        pitchShiftReadPos += pitchRatio;
-        if (pitchShiftReadPos >= static_cast<float>(pitchShiftBuffer.size()))
-            pitchShiftReadPos -= static_cast<float>(pitchShiftBuffer.size());
 
-        // Linear interpolation for smooth reading
-        int readIdx = static_cast<int>(pitchShiftReadPos);
-        float frac = pitchShiftReadPos - readIdx;
-        int nextIdx = (readIdx + 1) % static_cast<int>(pitchShiftBuffer.size());
-        
-        float sample = pitchShiftBuffer[readIdx] * (1.0f - frac) + 
-                       pitchShiftBuffer[nextIdx] * frac;
+        // Write to circular buffer
+        pitchShiftBuffer[pitchShiftWritePos] = input;
+        pitchShiftWritePos = (pitchShiftWritePos + 1) % bufSize;
 
-        // Apply window function to reduce artifacts (simple cosine crossfade)
-        const int grainSize = 512;
-        int grainPos = static_cast<int>(pitchShiftReadPos) % grainSize;
-        float window = 0.5f - 0.5f * std::cos(2.0f * juce::MathConstants<float>::pi * grainPos / grainSize);
-        
-        return sample * window;
+        float output = 0.0f;
+
+        for (int g = 0; g < 2; ++g)
+        {
+            // Advance read position at pitch ratio speed
+            grainReadPos[g] += pitchRatio;
+            if (grainReadPos[g] >= static_cast<float>(bufSize))
+                grainReadPos[g] -= static_cast<float>(bufSize);
+
+            // Hann window based on grain phase
+            float phase = static_cast<float>(grainPhase[g]) / static_cast<float>(grainSize);
+            float window = 0.5f - 0.5f * std::cos(2.0f * juce::MathConstants<float>::pi * phase);
+
+            // Linear interpolation read
+            int readIdx = static_cast<int>(grainReadPos[g]);
+            float frac = grainReadPos[g] - static_cast<float>(readIdx);
+            int nextIdx = (readIdx + 1) % bufSize;
+            float sample = pitchShiftBuffer[readIdx] * (1.0f - frac) +
+                           pitchShiftBuffer[nextIdx] * frac;
+
+            output += sample * window;
+
+            // Advance grain phase, reset grain when it completes
+            grainPhase[g]++;
+            if (grainPhase[g] >= grainSize)
+            {
+                grainPhase[g] = 0;
+                // Re-sync read position near write position to read fresh audio
+                grainReadPos[g] = static_cast<float>((pitchShiftWritePos - grainSize + bufSize) % bufSize);
+            }
+        }
+
+        return output;
     }
 };

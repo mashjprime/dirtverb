@@ -263,9 +263,12 @@ void CinderProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
         float wetR = postDestroyedR * (1.0f - pre) + reverbR * pre;
 
         // 8. Apply sidechain ducking
+        //    envState is raw amplitude (0–1 range for typical signals).
+        //    Scale by 5x so a signal peaking at ~0.5 drives full ducking.
         if (duck > 0.001f)
         {
-            float duckGain = std::max(0.0f, 1.0f - duck * envState);
+            float envScaled = std::min(envState * 5.0f, 1.0f);
+            float duckGain = std::max(0.0f, 1.0f - duck * envScaled);
             wetL *= duckGain;
             wetR *= duckGain;
         }
