@@ -50,8 +50,14 @@ private:
 
     // DSP components
     ShimmerReverb shimmerReverbL, shimmerReverbR;
-    LofiDegrader lofiDegraderL, lofiDegraderR;
-    Wavefolder wavefolderL, wavefolderR;
+
+    // Pre-destruction path (destroy before reverb)
+    LofiDegrader preLofiDegraderL, preLofiDegraderR;
+    Wavefolder preWavefolderL, preWavefolderR;
+
+    // Post-destruction path (destroy after reverb)
+    LofiDegrader postLofiDegraderL, postLofiDegraderR;
+    Wavefolder postWavefolderL, postWavefolderR;
 
     // Parameter pointers (for fast access in processBlock)
     std::atomic<float>* decayParam = nullptr;
@@ -61,6 +67,8 @@ private:
     std::atomic<float>* dirtParam = nullptr;
     std::atomic<float>* sizeParam = nullptr;
     std::atomic<float>* mixParam = nullptr;
+    std::atomic<float>* preParam = nullptr;
+    std::atomic<float>* duckParam = nullptr;
 
     // Smoothed parameters to avoid zipper noise
     juce::SmoothedValue<float> decaySmoothed;
@@ -70,6 +78,13 @@ private:
     juce::SmoothedValue<float> dirtSmoothed;
     juce::SmoothedValue<float> sizeSmoothed;
     juce::SmoothedValue<float> mixSmoothed;
+    juce::SmoothedValue<float> preSmoothed;
+    juce::SmoothedValue<float> duckSmoothed;
+
+    // Envelope follower state (for sidechain ducking)
+    float envState = 0.0f;
+    float envAttackCoeff = 0.0f;   // ~0.5ms attack
+    float envReleaseCoeff = 0.0f;  // ~150ms release
 
     double currentSampleRate = 44100.0;
 

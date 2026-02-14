@@ -15,6 +15,8 @@ CinderProcessor::CinderProcessor()
     dirtParam = apvts.getRawParameterValue("dirt");
     sizeParam = apvts.getRawParameterValue("size");
     mixParam = apvts.getRawParameterValue("mix");
+    preParam = apvts.getRawParameterValue("pre");
+    duckParam = apvts.getRawParameterValue("duck");
 }
 
 CinderProcessor::~CinderProcessor()
@@ -75,6 +77,21 @@ juce::AudioProcessorValueTreeState::ParameterLayout CinderProcessor::createParam
         juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f),
         0.3f));
 
+    // PRE: pre/post destruction routing
+    // 0 = post (destroy after reverb), 1 = pre (destroy before reverb)
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"pre", 1},
+        "Pre",
+        juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f),
+        0.0f));
+
+    // DUCK: sidechain ducking amount (dry envelope ducks wet signal)
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"duck", 1},
+        "Duck",
+        juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f),
+        0.0f));
+
     return {params.begin(), params.end()};
 }
 
@@ -85,10 +102,16 @@ void CinderProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     // Initialize DSP components
     shimmerReverbL.prepare(sampleRate, samplesPerBlock);
     shimmerReverbR.prepare(sampleRate, samplesPerBlock);
-    lofiDegraderL.prepare(sampleRate);
-    lofiDegraderR.prepare(sampleRate);
-    wavefolderL.prepare(sampleRate);
-    wavefolderR.prepare(sampleRate);
+
+    preLofiDegraderL.prepare(sampleRate);
+    preLofiDegraderR.prepare(sampleRate);
+    preWavefolderL.prepare(sampleRate);
+    preWavefolderR.prepare(sampleRate);
+
+    postLofiDegraderL.prepare(sampleRate);
+    postLofiDegraderR.prepare(sampleRate);
+    postWavefolderL.prepare(sampleRate);
+    postWavefolderR.prepare(sampleRate);
 
     // Initialize smoothed parameters (50ms smoothing time)
     const double smoothingTime = 0.05;
@@ -99,6 +122,8 @@ void CinderProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     dirtSmoothed.reset(sampleRate, smoothingTime);
     sizeSmoothed.reset(sampleRate, smoothingTime);
     mixSmoothed.reset(sampleRate, smoothingTime);
+    preSmoothed.reset(sampleRate, smoothingTime);
+    duckSmoothed.reset(sampleRate, smoothingTime);
 
     // Set initial values
     decaySmoothed.setCurrentAndTargetValue(*decayParam);
@@ -108,14 +133,28 @@ void CinderProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     dirtSmoothed.setCurrentAndTargetValue(*dirtParam);
     sizeSmoothed.setCurrentAndTargetValue(*sizeParam);
     mixSmoothed.setCurrentAndTargetValue(*mixParam);
+    preSmoothed.setCurrentAndTargetValue(*preParam);
+    duckSmoothed.setCurrentAndTargetValue(*duckParam);
+
+    // Envelope follower coefficients
+    envAttackCoeff = std::exp(-1.0f / (0.0005f * static_cast<float>(sampleRate)));   // 0.5ms attack
+    envReleaseCoeff = std::exp(-1.0f / (0.15f * static_cast<float>(sampleRate)));    // 150ms release
+    envState = 0.0f;
 }
 
 void CinderProcessor::releaseResources()
 {
     shimmerReverbL.reset();
     shimmerReverbR.reset();
-    lofiDegraderL.reset();
-    lofiDegraderR.reset();
+    preLofiDegraderL.reset();
+    preLofiDegraderR.reset();
+    preWavefolderL.reset();
+    preWavefolderR.reset();
+    postLofiDegraderL.reset();
+    postLofiDegraderR.reset();
+    postWavefolderL.reset();
+    postWavefolderR.reset();
+    envState = 0.0f;
 }
 
 void CinderProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
@@ -133,6 +172,8 @@ void CinderProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     dirtSmoothed.setTargetValue(*dirtParam);
     sizeSmoothed.setTargetValue(*sizeParam);
     mixSmoothed.setTargetValue(*mixParam);
+    preSmoothed.setTargetValue(*preParam);
+    duckSmoothed.setTargetValue(*duckParam);
 
     float* leftChannel = buffer.getWritePointer(0);
     float* rightChannel = numChannels > 1 ? buffer.getWritePointer(1) : leftChannel;
@@ -151,42 +192,85 @@ void CinderProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
         const float dirt = dirtSmoothed.getNextValue();
         const float size = sizeSmoothed.getNextValue();
         const float mix = mixSmoothed.getNextValue();
+        const float pre = preSmoothed.getNextValue();
+        const float duck = duckSmoothed.getNextValue();
 
         // Check for infinite mode (decay > 29.5s treated as freeze)
         const bool infiniteMode = decay > 29.5f;
         const float actualDecay = infiniteMode ? 100.0f : decay;
 
-        // Update DSP parameters
+        // Update reverb parameters
         shimmerReverbL.setParameters(actualDecay, shimmer, size);
         shimmerReverbR.setParameters(actualDecay, shimmer, size);
-        lofiDegraderL.setDegrade(degrade);
-        lofiDegraderR.setDegrade(degrade);
-        wavefolderL.setFold(fold);
-        wavefolderR.setFold(fold);
 
-        // Get input samples
+        // Update destruction parameters for both pre and post paths
+        preLofiDegraderL.setDegrade(degrade);
+        preLofiDegraderR.setDegrade(degrade);
+        preWavefolderL.setFold(fold);
+        preWavefolderR.setFold(fold);
+        postLofiDegraderL.setDegrade(degrade);
+        postLofiDegraderR.setDegrade(degrade);
+        postWavefolderL.setFold(fold);
+        postWavefolderR.setFold(fold);
+
+        // 1. Save pristine dry input
         const float dryL = leftChannel[i];
         const float dryR = rightChannel[i];
 
-        // 1. Process through shimmer reverb
-        float reverbL = shimmerReverbL.process(dryL);
-        float reverbR = shimmerReverbR.process(dryR);
+        // 2. Envelope follower on dry signal (for sidechain ducking)
+        const float dryMono = (std::abs(dryL) + std::abs(dryR)) * 0.5f;
+        const float envCoeff = (dryMono > envState) ? envAttackCoeff : envReleaseCoeff;
+        envState = envCoeff * envState + (1.0f - envCoeff) * dryMono;
 
-        // 2. Apply lo-fi degradation
-        float degradedL = lofiDegraderL.process(reverbL);
-        float degradedR = lofiDegraderR.process(reverbR);
+        // 3. Pre-destruction path (destroy BEFORE reverb)
+        float preDestroyedL = dryL;
+        float preDestroyedR = dryR;
+        if (pre > 0.001f)
+        {
+            float preDegL = preLofiDegraderL.process(dryL);
+            float preDegR = preLofiDegraderR.process(dryR);
+            float preFoldL = preWavefolderL.process(preDegL);
+            float preFoldR = preWavefolderR.process(preDegR);
+            preDestroyedL = preDegL * (1.0f - dirt) + preFoldL * dirt;
+            preDestroyedR = preDegR * (1.0f - dirt) + preFoldR * dirt;
+        }
 
-        // 3. Parallel paths: clean vs wavefolded
-        float cleanL = degradedL;
-        float cleanR = degradedR;
-        float foldedL = wavefolderL.process(degradedL);
-        float foldedR = wavefolderR.process(degradedR);
+        // 4. Reverb input: blend clean dry and pre-destroyed by PRE amount
+        float reverbInL = dryL * (1.0f - pre) + preDestroyedL * pre;
+        float reverbInR = dryR * (1.0f - pre) + preDestroyedR * pre;
 
-        // 4. Blend clean and folded (DIRT parameter)
-        float wetL = cleanL * (1.0f - dirt) + foldedL * dirt;
-        float wetR = cleanR * (1.0f - dirt) + foldedR * dirt;
+        // 5. Shimmer reverb
+        float reverbL = shimmerReverbL.process(reverbInL);
+        float reverbR = shimmerReverbR.process(reverbInR);
 
-        // 5. Final dry/wet mix
+        // 6. Post-destruction path (destroy AFTER reverb)
+        float postDestroyedL = reverbL;
+        float postDestroyedR = reverbR;
+        if (pre < 0.999f)
+        {
+            float postDegL = postLofiDegraderL.process(reverbL);
+            float postDegR = postLofiDegraderR.process(reverbR);
+            float postFoldL = postWavefolderL.process(postDegL);
+            float postFoldR = postWavefolderR.process(postDegR);
+            postDestroyedL = postDegL * (1.0f - dirt) + postFoldL * dirt;
+            postDestroyedR = postDegR * (1.0f - dirt) + postFoldR * dirt;
+        }
+
+        // 7. Wet signal: blend post-destroyed and clean reverb by PRE amount
+        //    pre=0: fully post-destroyed (default, same as old behavior)
+        //    pre=1: clean reverb (destruction happened before reverb)
+        float wetL = postDestroyedL * (1.0f - pre) + reverbL * pre;
+        float wetR = postDestroyedR * (1.0f - pre) + reverbR * pre;
+
+        // 8. Apply sidechain ducking
+        if (duck > 0.001f)
+        {
+            float duckGain = std::max(0.0f, 1.0f - duck * envState);
+            wetL *= duckGain;
+            wetR *= duckGain;
+        }
+
+        // 9. Final dry/wet mix
         leftChannel[i] = dryL * (1.0f - mix) + wetL * mix;
         rightChannel[i] = dryR * (1.0f - mix) + wetR * mix;
 
