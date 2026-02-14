@@ -22,9 +22,9 @@ void CinderContentPanel::paint(juce::Graphics& g)
     g.drawText("SUBSTRATE AUDIO", w - 140 - pad, 12, 140, 14, juce::Justification::centredRight);
 
     // Section titles and dividers
-    const char* titles[] = { "REVERB", "DESTRUCTION", "DYNAMICS", "OUTPUT" };
+    const char* titles[] = { "REVERB", "FIRE", "OUTPUT" };
 
-    for (int i = 0; i < 4; ++i)
+    for (int i = 0; i < 3; ++i)
     {
         int sy = sectionYPositions[i];
         if (sy <= 0) continue;
@@ -52,7 +52,7 @@ CinderEditor::CinderEditor(CinderProcessor& p)
       processor(p),
       waveformVisualizer(p.currentReverbLevel,
                          *p.apvts.getRawParameterValue("decay"),
-                         *p.apvts.getRawParameterValue("degrade")),
+                         *p.apvts.getRawParameterValue("burn")),
       outputMeter(p.outputRmsLevel, p.outputPeakLevel)
 {
     setLookAndFeel(&cinderLook);
@@ -81,17 +81,13 @@ CinderEditor::CinderEditor(CinderProcessor& p)
     addKnob(shimmerKnob, shimmerLabel, "SHIMMER", "shimmer", shimmerAtt);
     addKnob(sizeKnob,    sizeLabel,    "SIZE",    "size",    sizeAtt);
 
-    // Destruction section
-    addKnob(degradeKnob, degradeLabel, "DEGRADE", "degrade", degradeAtt);
-    addKnob(foldKnob,    foldLabel,    "FOLD",    "fold",    foldAtt);
-    addKnob(dirtKnob,    dirtLabel,    "DIRT",    "dirt",    dirtAtt);
-    addKnob(preKnob,     preLabel,     "PRE",     "pre",     preAtt);
-
-    // Dynamics section
-    addKnob(duckKnob, duckLabel, "DUCK", "duck", duckAtt);
+    // Fire section
+    addKnob(driveKnob, driveLabel, "DRIVE", "drive", driveAtt);
+    addKnob(burnKnob,  burnLabel,  "BURN",  "burn",  burnAtt);
 
     // Output section
-    addKnob(mixKnob, mixLabel, "MIX", "mix", mixAtt);
+    addKnob(duckKnob, duckLabel, "DUCK", "duck", duckAtt);
+    addKnob(mixKnob,  mixLabel,  "MIX",  "mix",  mixAtt);
 
     // Resizable (aspect-ratio locked)
     constrainer.setFixedAspectRatio(static_cast<double>(designW) / static_cast<double>(designH));
@@ -135,7 +131,7 @@ void CinderEditor::resized()
     contentPanel.setTransform(juce::AffineTransform::scale(scale));
     contentPanel.setBounds(0, 0, designW, designH);
 
-    // --- All layout below at design dimensions (520 x 500) ---
+    // --- All layout below at design dimensions (520 x 440) ---
     const int pad = 16;
     const int labelH = 14;
     const int knobS = 55;
@@ -169,11 +165,11 @@ void CinderEditor::resized()
     }
     y += knobS + labelH + 4;
 
-    // --- DESTRUCTION section (DEGRADE, FOLD, DIRT, PRE) ---
+    // --- FIRE section (DRIVE, BURN) ---
     contentPanel.sectionYPositions[1] = y;
     y += 18;
     {
-        int numKnobs = 4;
+        int numKnobs = 2;
         int totalW = designW - pad * 2;
         int spacing = (totalW - numKnobs * knobS) / (numKnobs + 1);
         int kx = pad + spacing;
@@ -184,39 +180,28 @@ void CinderEditor::resized()
             kx += knobS + spacing;
         };
 
-        placeKnob(degradeLabel, degradeKnob);
-        placeKnob(foldLabel, foldKnob);
-        placeKnob(dirtLabel, dirtKnob);
-        placeKnob(preLabel, preKnob);
+        placeKnob(driveLabel, driveKnob);
+        placeKnob(burnLabel, burnKnob);
     }
     y += knobS + labelH + 4;
 
-    // --- DYNAMICS section (DUCK) ---
+    // --- OUTPUT section (DUCK, MIX + OutputMeter) ---
     contentPanel.sectionYPositions[2] = y;
     y += 18;
     {
         int totalW = designW - pad * 2;
-        int startX = pad + (totalW - knobS) / 2;
+        int meterW = 20;
+        int contentW = knobS * 2 + 30 + meterW;  // 2 knobs + gap + meter
+        int startX = pad + (totalW - contentW) / 2;
 
         duckLabel.setBounds(startX, y, knobS, labelH);
         duckKnob.setBounds(startX, y + labelH, knobS, knobS);
-    }
-    y += knobS + labelH + 4;
 
-    // --- OUTPUT section (MIX knob + OutputMeter) ---
-    contentPanel.sectionYPositions[3] = y;
-    y += 18;
-    {
-        int totalW = designW - pad * 2;
-        int meterW = 20;
-        int knobW = knobS;
-        int contentW = knobW + meterW + 20;
-        int startX = pad + (totalW - contentW) / 2;
+        int mixX = startX + knobS + 30;
+        mixLabel.setBounds(mixX, y, knobS, labelH);
+        mixKnob.setBounds(mixX, y + labelH, knobS, knobS);
 
-        mixLabel.setBounds(startX, y, knobW, labelH);
-        mixKnob.setBounds(startX, y + labelH, knobW, knobW);
-
-        int meterX = startX + knobW + 20;
-        outputMeter.setBounds(meterX, y, meterW, knobW + labelH);
+        int meterX = mixX + knobS + 20;
+        outputMeter.setBounds(meterX, y, meterW, knobS + labelH);
     }
 }

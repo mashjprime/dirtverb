@@ -3,8 +3,6 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
 #include "DSP/ShimmerReverb.h"
-#include "DSP/LofiDegrader.h"
-#include "DSP/Wavefolder.h"
 
 class CinderProcessor : public juce::AudioProcessor
 {
@@ -51,35 +49,23 @@ private:
     // DSP components
     ShimmerReverb shimmerReverbL, shimmerReverbR;
 
-    // Pre-destruction path (destroy before reverb)
-    LofiDegrader preLofiDegraderL, preLofiDegraderR;
-    Wavefolder preWavefolderL, preWavefolderR;
-
-    // Post-destruction path (destroy after reverb)
-    LofiDegrader postLofiDegraderL, postLofiDegraderR;
-    Wavefolder postWavefolderL, postWavefolderR;
-
     // Parameter pointers (for fast access in processBlock)
+    std::atomic<float>* driveParam = nullptr;
     std::atomic<float>* decayParam = nullptr;
     std::atomic<float>* shimmerParam = nullptr;
-    std::atomic<float>* degradeParam = nullptr;
-    std::atomic<float>* foldParam = nullptr;
-    std::atomic<float>* dirtParam = nullptr;
+    std::atomic<float>* burnParam = nullptr;
     std::atomic<float>* sizeParam = nullptr;
-    std::atomic<float>* mixParam = nullptr;
-    std::atomic<float>* preParam = nullptr;
     std::atomic<float>* duckParam = nullptr;
+    std::atomic<float>* mixParam = nullptr;
 
     // Smoothed parameters to avoid zipper noise
+    juce::SmoothedValue<float> driveSmoothed;
     juce::SmoothedValue<float> decaySmoothed;
     juce::SmoothedValue<float> shimmerSmoothed;
-    juce::SmoothedValue<float> degradeSmoothed;
-    juce::SmoothedValue<float> foldSmoothed;
-    juce::SmoothedValue<float> dirtSmoothed;
+    juce::SmoothedValue<float> burnSmoothed;
     juce::SmoothedValue<float> sizeSmoothed;
-    juce::SmoothedValue<float> mixSmoothed;
-    juce::SmoothedValue<float> preSmoothed;
     juce::SmoothedValue<float> duckSmoothed;
+    juce::SmoothedValue<float> mixSmoothed;
 
     // Envelope follower state (for sidechain ducking)
     float envState = 0.0f;

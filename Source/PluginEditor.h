@@ -28,8 +28,8 @@ public:
 class CinderContentPanel : public juce::Component
 {
 public:
-    // Section title Y positions (set by resized in editor)
-    std::array<int, 4> sectionYPositions {};
+    // Section title Y positions (3 sections: REVERB, FIRE, OUTPUT)
+    std::array<int, 3> sectionYPositions {};
     CinderLookAndFeel* laf = nullptr;
 
     void paint(juce::Graphics& g) override;
@@ -48,7 +48,7 @@ public:
 
 private:
     static constexpr int designW = 520;
-    static constexpr int designH = 500;
+    static constexpr int designH = 440;
 
     CinderProcessor& processor;
     CinderLookAndFeel cinderLook;
@@ -62,24 +62,23 @@ private:
     WaveformVisualizer waveformVisualizer;
     OutputMeter outputMeter;
 
-    // Knobs
+    // Knobs — REVERB section
     CinderKnob decayKnob, shimmerKnob, sizeKnob;
-    CinderKnob degradeKnob, foldKnob, dirtKnob, preKnob;
-    CinderKnob duckKnob;
-    CinderKnob mixKnob;
+    // Knobs — FIRE section
+    CinderKnob driveKnob, burnKnob;
+    // Knobs — OUTPUT section
+    CinderKnob duckKnob, mixKnob;
 
     // Labels
     juce::Label decayLabel, shimmerLabel, sizeLabel;
-    juce::Label degradeLabel, foldLabel, dirtLabel, preLabel;
-    juce::Label duckLabel;
-    juce::Label mixLabel;
+    juce::Label driveLabel, burnLabel;
+    juce::Label duckLabel, mixLabel;
 
     // Parameter attachments
     using SliderAtt = juce::AudioProcessorValueTreeState::SliderAttachment;
     std::unique_ptr<SliderAtt> decayAtt, shimmerAtt, sizeAtt;
-    std::unique_ptr<SliderAtt> degradeAtt, foldAtt, dirtAtt, preAtt;
-    std::unique_ptr<SliderAtt> duckAtt;
-    std::unique_ptr<SliderAtt> mixAtt;
+    std::unique_ptr<SliderAtt> driveAtt, burnAtt;
+    std::unique_ptr<SliderAtt> duckAtt, mixAtt;
 
     void setupLabel(juce::Label& label, const juce::String& text);
 

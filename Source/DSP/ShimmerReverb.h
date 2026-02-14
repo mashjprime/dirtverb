@@ -76,7 +76,7 @@ public:
         grainPhase[1] = grainSize / 2;
     }
 
-    void setParameters(float decaySeconds, float shimmerAmount, float size)
+    void setParameters(float decaySeconds, float shimmerAmount, float size, float burn)
     {
         // Convert decay time to feedback gain
         // Using RT60 formula: gain = 10^(-3 * delayTime / RT60)
@@ -101,10 +101,12 @@ public:
         // Damping: higher roomSize = less damping (brighter)
         // Also reduce damping coefficient to absorb more energy
         dampingCoeff = 0.2f + roomSize * 0.4f;
-        
+
         // Compensate feedback for shimmer energy injection
         // Shimmer adds energy, so reduce feedback proportionally
         shimmerCompensation = 1.0f - (shimmerAmount * 0.15f);
+
+        burnAmount = std::clamp(burn, 0.0f, 1.0f);
     }
 
     float process(float input)
@@ -136,15 +138,19 @@ public:
         // This creates dense, energy-preserving feedback
         std::array<float, 8> mixed = hadamardMix(delayOutputs);
 
-        // 4. Apply damping (one-pole lowpass), soft limiting, and feedback gain
+        // 4. Apply damping (one-pole lowpass), burn saturation, soft limiting, and feedback gain
         for (int i = 0; i < 8; ++i)
         {
             // Simple one-pole lowpass for damping
             dampingFilters[i] = dampingFilters[i] + dampingCoeff * (mixed[i] - dampingFilters[i]);
-            
-            // Soft limiter in feedback loop to prevent runaway
-            float limited = softLimit(dampingFilters[i]);
-            
+
+            // BURN: drive into soft limiter for progressive saturation per echo
+            // At burn=0: gain=1x (clean, no extra saturation)
+            // At burn=1: gain=5x (heavy drive into tanh limiter)
+            float burnGain = 1.0f + burnAmount * 4.0f;
+            float burned = dampingFilters[i] * burnGain;
+            float limited = softLimit(burned);
+
             // Apply feedback gain with shimmer compensation
             mixed[i] = limited * feedbackGain * shimmerCompensation;
         }
@@ -192,6 +198,7 @@ private:
     float shimmerMix = 0.0f;
     float roomSize = 0.5f;
     float shimmerCompensation = 1.0f;
+    float burnAmount = 0.0f;
 
     // Pitch shifter state (dual-grain overlap-add)
     std::vector<float> pitchShiftBuffer;
