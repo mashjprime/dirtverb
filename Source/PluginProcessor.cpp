@@ -15,6 +15,7 @@ CinderProcessor::CinderProcessor()
     sizeParam = apvts.getRawParameterValue("size");
     duckParam = apvts.getRawParameterValue("duck");
     mixParam = apvts.getRawParameterValue("mix");
+    freezeParam = apvts.getRawParameterValue("freeze");
 }
 
 CinderProcessor::~CinderProcessor()
@@ -75,6 +76,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout CinderProcessor::createParam
         juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f),
         0.3f));
 
+    // FREEZE: gate input, set feedback to unity for infinite sustain
+    params.push_back(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID{"freeze", 1}, "Freeze", false));
+
     return {params.begin(), params.end()};
 }
 
@@ -95,6 +100,7 @@ void CinderProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     sizeSmoothed.reset(sampleRate, smoothingTime);
     duckSmoothed.reset(sampleRate, smoothingTime);
     mixSmoothed.reset(sampleRate, smoothingTime);
+    freezeSmoothed.reset(sampleRate, smoothingTime);
 
     // Set initial values
     driveSmoothed.setCurrentAndTargetValue(*driveParam);
@@ -104,6 +110,7 @@ void CinderProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     sizeSmoothed.setCurrentAndTargetValue(*sizeParam);
     duckSmoothed.setCurrentAndTargetValue(*duckParam);
     mixSmoothed.setCurrentAndTargetValue(*mixParam);
+    freezeSmoothed.setCurrentAndTargetValue(0.0f);
 
     // Envelope follower coefficients
     envAttackCoeff = std::exp(-1.0f / (0.0005f * static_cast<float>(sampleRate)));   // 0.5ms attack
@@ -133,6 +140,7 @@ void CinderProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     sizeSmoothed.setTargetValue(*sizeParam);
     duckSmoothed.setTargetValue(*duckParam);
     mixSmoothed.setTargetValue(*mixParam);
+    freezeSmoothed.setTargetValue(*freezeParam >= 0.5f ? 1.0f : 0.0f);
 
     float* leftChannel = buffer.getWritePointer(0);
     float* rightChannel = numChannels > 1 ? buffer.getWritePointer(1) : leftChannel;
@@ -151,10 +159,13 @@ void CinderProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
         const float size = sizeSmoothed.getNextValue();
         const float duck = duckSmoothed.getNextValue();
         const float mix = mixSmoothed.getNextValue();
+        const float fz = freezeSmoothed.getNextValue();
 
         // Check for infinite mode (decay > 29.5s treated as freeze)
         const bool infiniteMode = decay > 29.5f;
-        const float actualDecay = infiniteMode ? 100.0f : decay;
+        const float baseDecay = infiniteMode ? 100.0f : decay;
+        // When frozen, lerp decay toward infinite (100.0)
+        const float actualDecay = baseDecay + fz * (100.0f - baseDecay);
 
         // 1. Save pristine dry input
         const float dryL = leftChannel[i];
@@ -170,6 +181,10 @@ void CinderProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
         float driveGain = 1.0f + drive * 5.0f;
         float drivenL = std::tanh(dryL * driveGain);
         float drivenR = std::tanh(dryR * driveGain);
+
+        // 3b. Gate input when frozen (smoothed to avoid clicks)
+        drivenL *= (1.0f - fz);
+        drivenR *= (1.0f - fz);
 
         // 4. Update reverb parameters (burn is applied inside the feedback loop)
         shimmerReverbL.setParameters(actualDecay, shimmer, size, burn);

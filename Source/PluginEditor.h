@@ -69,6 +69,9 @@ private:
     // Knobs — OUTPUT section
     CinderKnob duckKnob, mixKnob;
 
+    // Freeze toggle
+    juce::ToggleButton freezeButton;
+
     // Labels
     juce::Label decayLabel, shimmerLabel, sizeLabel;
     juce::Label driveLabel, burnLabel;
@@ -79,6 +82,9 @@ private:
     std::unique_ptr<SliderAtt> decayAtt, shimmerAtt, sizeAtt;
     std::unique_ptr<SliderAtt> driveAtt, burnAtt;
     std::unique_ptr<SliderAtt> duckAtt, mixAtt;
+
+    using ButtonAtt = juce::AudioProcessorValueTreeState::ButtonAttachment;
+    std::unique_ptr<ButtonAtt> freezeAtt;
 
     void setupLabel(juce::Label& label, const juce::String& text);
 

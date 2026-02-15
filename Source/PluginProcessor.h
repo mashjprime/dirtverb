@@ -57,6 +57,7 @@ private:
     std::atomic<float>* sizeParam = nullptr;
     std::atomic<float>* duckParam = nullptr;
     std::atomic<float>* mixParam = nullptr;
+    std::atomic<float>* freezeParam = nullptr;
 
     // Smoothed parameters to avoid zipper noise
     juce::SmoothedValue<float> driveSmoothed;
@@ -66,6 +67,7 @@ private:
     juce::SmoothedValue<float> sizeSmoothed;
     juce::SmoothedValue<float> duckSmoothed;
     juce::SmoothedValue<float> mixSmoothed;
+    juce::SmoothedValue<float> freezeSmoothed;
 
     // Envelope follower state (for sidechain ducking)
     float envState = 0.0f;

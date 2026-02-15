@@ -89,6 +89,12 @@ CinderEditor::CinderEditor(CinderProcessor& p)
     addKnob(duckKnob, duckLabel, "DUCK", "duck", duckAtt);
     addKnob(mixKnob,  mixLabel,  "MIX",  "mix",  mixAtt);
 
+    // Freeze toggle
+    contentPanel.addAndMakeVisible(freezeButton);
+    freezeButton.setButtonText("FREEZE");
+    freezeButton.setTooltip("Freeze reverb tail — infinite sustain with live control");
+    freezeAtt = std::make_unique<ButtonAtt>(processor.apvts, "freeze", freezeButton);
+
     // Resizable (aspect-ratio locked)
     constrainer.setFixedAspectRatio(static_cast<double>(designW) / static_cast<double>(designH));
     constrainer.setSizeLimits(
@@ -137,7 +143,8 @@ void CinderEditor::resized()
     const int knobS = 55;
     int y = 0;
 
-    // Header: 36px
+    // Header: 36px — freeze button in header bar
+    freezeButton.setBounds(240, 6, 90, 24);
     y += 36;
 
     // Waveform Visualizer: 76px
