@@ -91,8 +91,8 @@ public:
             // Average delay time ~30ms
             const float avgDelaySeconds = 0.030f;
             feedbackGain = std::pow(10.0f, -3.0f * avgDelaySeconds / decaySeconds);
-            // Cap at 0.985 to prevent runaway even at high decay
-            feedbackGain = std::clamp(feedbackGain, 0.0f, 0.985f);
+            // Cap at 0.998 — allows long, lush tails without runaway
+            feedbackGain = std::clamp(feedbackGain, 0.0f, 0.998f);
         }
 
         shimmerMix = shimmerAmount;
@@ -104,7 +104,7 @@ public:
 
         // Compensate feedback for shimmer energy injection
         // Shimmer adds energy, so reduce feedback proportionally
-        shimmerCompensation = 1.0f - (shimmerAmount * 0.15f);
+        shimmerCompensation = 1.0f - (shimmerAmount * 0.08f);
 
         burnAmount = std::clamp(burn, 0.0f, 1.0f);
     }
@@ -156,14 +156,18 @@ public:
         }
 
         // 5. Apply shimmer (pitch shift) in feedback
-        float pitchShifted = processPitchShift(mixed[0]); // Use first channel for shimmer
-        
-        // 6. Write to delay lines (input + feedback, with shimmer blended)
+        // Mix all 8 FDN channels into the pitch shifter for full-spectrum shimmer
+        float shimmerInput = 0.0f;
+        for (int i = 0; i < 8; ++i)
+            shimmerInput += mixed[i];
+        shimmerInput *= 0.125f; // normalize (1/8)
+        float pitchShifted = processPitchShift(shimmerInput);
+
+        // 6. Write to delay lines (input + feedback, with shimmer blended into all channels)
         float inputContribution = diffused / 8.0f;
         for (int i = 0; i < 8; ++i)
         {
-            // Reduced shimmer contribution to prevent energy buildup
-            float shimmerContrib = (i < 4) ? pitchShifted * shimmerMix * 0.25f : 0.0f;
+            float shimmerContrib = pitchShifted * shimmerMix * 0.5f;
             float toWrite = mixed[i] + inputContribution + shimmerContrib;
             // Final safety limiter before writing to delay
             delayLines[i].pushSample(0, softLimit(toWrite));
